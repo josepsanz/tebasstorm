@@ -128,7 +128,7 @@ class LaLigaFantasy:
                 except:
                     if idx < len(lines) * 0.25:
                         continue
-                    
+
                 if sig in self._signatures:
                     continue
 
@@ -193,6 +193,9 @@ class LaLigaFantasy:
             
             print(trading)
             print('---')
+
+            if self.SHOW_MORE_STR in ' '.join(lines):
+                break
             #time.sleep(1)
 
             pyautogui.scroll(self.SCROLL_STEP, x=xx, y=yy)
