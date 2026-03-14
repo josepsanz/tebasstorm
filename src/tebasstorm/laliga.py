@@ -1,13 +1,17 @@
 import io
+import re
 import time
+import datetime
 import subprocess as sp
 
 import cv2
+import yaml
 import numpy as np
 import pandas as pd
 import pyautogui
 import pytesseract
 from PIL import Image
+import Levenshtein
 
 
 def get_adb_screenshot():
@@ -33,9 +37,55 @@ class LaLigaFantasy:
     SHOW_MORE_STR = 'Show more'
 
     NEW_MEMBER_STR = 'New member'
+
+    SCROLL_STEP = -2
+    SKIP_TH = 0.70
+
+    def __init__(self, settings_fn: str):
+        self._signatures = set()
+        with open(settings_fn, 'r') as fp:
+            self._settings = yaml.safe_load(fp)
+            self._settings['teams'] = set(self._settings['teams'])
         
+    def check_team(self, team):
+        if team in self._settings['teams']:
+            return team
+
+        best_dist, target_team = len(team), ''
+        for team_bis in self._settings['teams']:
+            cur_dist = Levenshtein.distance(team, team_bis)
+            if cur_dist < best_dist:
+                target_team = team_bis
+                best_dist = cur_dist
+        
+        if not target_team:
+            raise RuntimeError
+
+        return target_team
+
     @classmethod
-    def get_entities_from_mo_line(cls, date_str: str, mo_str: str):
+    def get_date_from_str(cls, dt: datetime.datetime, date_str: str):
+        if '/' in date_str:
+            day, month, year = date_str.split('/')
+            day, month, year = int(day), int(month), int(year)
+            date = datetime.date(year, month, day)
+        else:
+            date_int = int(re.sub(r'\D', '', date_str))
+            dt_int = 100 * dt.hour + dt.minute
+            if date_int < dt_int:
+                date = datetime.date(dt.year, dt.month, dt.day)
+            else:
+                ddt = dt - datetime.timedelta(days=1)
+                date = datetime.date(ddt.year, ddt.month, ddt.day)
+
+        return date
+
+    @classmethod
+    def get_signature(cls, date, mo_type, team1, team2, player, amount):
+        sig = f'{date}_{mo_type}_{team1}_{team2}_{player}_{amount}'
+        return sig
+        
+    def get_entities_from_mo_line(self, date_str: str, mo_str: str):
         SOLD_REF = ' has sold player '
         PURCHASED_REF = 'has purchased '
         if SOLD_REF in mo_str:
@@ -60,30 +110,51 @@ class LaLigaFantasy:
         team2 = mo_str[idx1:idx2].strip()
 
         idx1 = idx2 + len(FOR_REF)
-        amount = mo_str[idx1:].replace(',', '').replace(' ', '').replace('€', '')
-        return date_str, mo_type, team1, team2, player, amount
+        amount = int(re.sub(r'\D', '', mo_str[idx1:]))
         
-    @classmethod
-    def get_market_operations_from_lines(cls, lines):
+        date = self.get_date_from_str(datetime.datetime.now(), date_str)
+        team1 = self.check_team(team1)
+        team2 = self.check_team(team2)
+        return date, mo_type, team1, team2, player, amount
+    
+    def scan(self, lines):
         for idx, line in enumerate(lines):
-            if cls.MARKET_OPERATION_STR not in line:
-                continue
-            
-            # MO
-            date_str = ''.join(line.split(' ')[2:])            
-            mo_lines = [] 
-            for mo_line in lines[(idx + 1):]:
-                mo_lines.append(mo_line)
-                if '€' in mo_line:
-                    break
-            
-            mo_str = ' '.join(mo_lines).strip()
-            if mo_str.endswith('€'):
-                entities = cls.get_entities_from_mo_line(date_str, mo_str)
+            if len(lines) * self.SKIP_TH < idx:
+                break
+
+            if self.MARKET_OPERATION_STR in line:
+                try:
+                    sig, entities = self.get_market_operation(idx, line, lines)
+                except:
+                    if idx < len(lines) * 0.25:
+                        continue
+                    
+                if sig in self._signatures:
+                    continue
+
+                self._signatures |= {sig}
                 yield entities
 
-    @classmethod
-    def screen_capture_loop(cls):
+            elif self.REWARD_STR in line:
+                print('Reward')
+            elif self.SHIELD_STR in line:
+                print('Shield')
+
+    def get_market_operation(self, idx, line, lines):
+        date_str = ''.join(line.split(' ')[2:])            
+        mo_lines = [] 
+        for mo_line in lines[(idx + 1):]:
+            mo_lines.append(mo_line)
+            if '€' in mo_line:
+                break
+        
+        mo_str = ' '.join(mo_lines).strip()
+        if mo_str.endswith('€'):
+            entities = self.get_entities_from_mo_line(date_str, mo_str)
+            sig = self.get_signature(*entities)
+            return sig, entities
+
+    def screen_capture_loop(self):
         output = sp.check_output(['xdotool', 'search', '--classname', 'scrcpy', 'getwindowgeometry'])
         output_lines = output.decode('utf-8').split('\n')
 
@@ -115,15 +186,16 @@ class LaLigaFantasy:
             
             output = pytesseract.image_to_string(img)
             lines = output.split('\n')
-            mo_lines = tuple(cls.get_market_operations_from_lines(lines))
+            rows = tuple(self.scan(lines))
             
-            ddf = pd.DataFrame(mo_lines, columns=columns)
+            ddf = pd.DataFrame(rows, columns=columns)
             trading = pd.concat([trading, ddf], ignore_index=True)
             
             print(trading)
-            time.sleep(5)
-            pyautogui.scroll(-1, x=xx, y=yy)
+            print('---')
+            #time.sleep(1)
 
+            pyautogui.scroll(self.SCROLL_STEP, x=xx, y=yy)
 
         return trading
         

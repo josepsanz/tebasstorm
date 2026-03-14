@@ -14,6 +14,8 @@ dependencies = [
     "pillow>=12.1.1",
     "pyautogui>=0.9.54",
     "pytesseract>=0.3.13",
+    "python-levenshtein>=0.27.3",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]
