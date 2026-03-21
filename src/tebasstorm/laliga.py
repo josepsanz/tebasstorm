@@ -82,7 +82,7 @@ class LaLigaFantasy:
 
     @classmethod
     def get_signature(cls, date, mo_type, team1, team2, player, amount):
-        sig = f'{date}_{mo_type}_{team1}_{team2}_{player}_{amount}'
+        sig = f'{date} {mo_type} {team1} {team2} {player} {amount}'
         return sig
         
     def get_entities_from_mo_line(self, date_str: str, mo_str: str):
@@ -154,7 +154,7 @@ class LaLigaFantasy:
             sig = self.get_signature(*entities)
             return sig, entities
 
-    def screen_capture_loop(self):
+    def screen_capture_loop(self, limit_capture_date=None):
         output = sp.check_output(['xdotool', 'search', '--classname', 'scrcpy', 'getwindowgeometry'])
         output_lines = output.decode('utf-8').split('\n')
 
@@ -196,9 +196,36 @@ class LaLigaFantasy:
 
             if self.SHOW_MORE_STR in ' '.join(lines):
                 break
-            #time.sleep(1)
+
+            if limit_capture_date:
+                if trading['date'].min() < limit_capture_date:
+                    break
 
             pyautogui.scroll(self.SCROLL_STEP, x=xx, y=yy)
 
         return trading
+    
+    @classmethod
+    def merge_trading_datasets(cls, historical_df, partial_df):
+        def row_signature(row):
+            date = row['date']
+            mo_type = row['type']
+            team1 = row['team1']
+            team2 = row['team2']
+            player = row['player']
+            amount = row['amount']
+
+            return cls.get_signature(date, mo_type, team1, team2, player, amount)
+        
+        ###
+        historical_df['sig'] = pd.Series(row_signature(row) for _, row in historical_df.iterrows())
+        partial_df['sig'] = pd.Series(row_signature(row) for _, row in partial_df.iterrows())
+
+        ddf = partial_df[~(partial_df['sig'].isin(historical_df['sig']))]
+        historical_df = pd.concat([ddf, historical_df], ignore_index=True)
+        historical_df.drop(columns='sig', inplace=True)
+
+        return historical_df
+        
+
         
