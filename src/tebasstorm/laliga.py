@@ -1,6 +1,7 @@
 import io
 import re
 import time
+import logging
 import datetime
 import subprocess as sp
 
@@ -13,6 +14,8 @@ import pytesseract
 from PIL import Image
 import Levenshtein
 
+
+logger = logging.getLogger(__name__)
 
 def get_adb_screenshot():
     adb_command = ['adb', 'exec-out', 'screencap', '-p']
@@ -229,6 +232,4 @@ class LaLigaFantasy:
         historical_df.drop(columns='sig', inplace=True)
 
         return historical_df
-        
-
         
