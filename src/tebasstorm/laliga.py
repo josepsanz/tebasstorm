@@ -154,25 +154,7 @@ class LaLigaFantasy:
             sig = self.get_signature(*entities)
             return sig, entities
 
-    def screen_capture_loop(self, limit_capture_date=None):
-        output = sp.check_output(['xdotool', 'search', '--classname', 'scrcpy', 'getwindowgeometry'])
-        output_lines = output.decode('utf-8').split('\n')
-
-        position_line = output_lines[1]
-        idx = position_line.find(',')
-        x_pos = int(position_line[:idx].split(' ')[-1])
-        y_pos = int(position_line[(idx + 1):].split(' ')[0])
-
-        geometry_line = output_lines[2]
-        idx = geometry_line.find('x')
-        x_size = int(geometry_line[:idx].split(' ')[-1])
-        y_size = int(geometry_line[(idx + 1):])
-        
-        region = (x_pos, y_pos + 10, x_size, y_size - 100)
-        xx = (x_pos + x_size) // 2
-        yy = (y_pos + y_size) // 2
-        (x_pos + x_size) // 2
-
+    def screen_capture_loop(self, limit_capture_date=None, auto=True):
         columns = ('date', 'type', 'team1', 'team2', 'player', 'amount')
         trading = pd.DataFrame()
 
@@ -201,7 +183,28 @@ class LaLigaFantasy:
                 if trading['date'].min() < limit_capture_date:
                     break
 
-            pyautogui.scroll(self.SCROLL_STEP, x=xx, y=yy)
+            if auto:
+                output = sp.check_output(['xdotool', 'search', '--classname', 'scrcpy', 'getwindowgeometry'])
+                output_lines = output.decode('utf-8').split('\n')
+
+                position_line = output_lines[1]
+                idx = position_line.find(',')
+                x_pos = int(position_line[:idx].split(' ')[-1])
+                y_pos = int(position_line[(idx + 1):].split(' ')[0])
+
+                geometry_line = output_lines[2]
+                idx = geometry_line.find('x')
+                x_size = int(geometry_line[:idx].split(' ')[-1])
+                y_size = int(geometry_line[(idx + 1):])
+                
+                region = (x_pos, y_pos + 10, x_size, y_size - 100)
+                xx = (x_pos + x_size) // 2
+                yy = (y_pos + y_size) // 2
+                (x_pos + x_size) // 2
+                
+                pyautogui.scroll(self.SCROLL_STEP, x=xx, y=yy)
+            else:
+                time.sleep(0.5)
 
         return trading
     
