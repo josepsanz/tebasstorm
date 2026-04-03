@@ -128,6 +128,8 @@ class LaLigaFantasy:
             if self.MARKET_OPERATION_STR in line:
                 try:
                     sig, entities = self.get_market_operation(idx, line, lines)
+                except RuntimeError:
+                    raise
                 except:
                     if idx < len(lines) * 0.25:
                         continue
@@ -151,11 +153,15 @@ class LaLigaFantasy:
             if '€' in mo_line:
                 break
         
+        clean_price = mo_lines[-1].split(',')
+        mo_lines[-1] = clean_price[0] + re.sub(r'[^\d€]', '', ''.join(clean_price[1:]))
         mo_str = ' '.join(mo_lines).strip()
-        if mo_str.endswith('€'):
-            entities = self.get_entities_from_mo_line(date_str, mo_str)
-            sig = self.get_signature(*entities)
-            return sig, entities
+        if not mo_str.endswith('€'):
+            raise RuntimeError(f'Issue: {mo_str}')
+        
+        entities = self.get_entities_from_mo_line(date_str, mo_str)
+        sig = self.get_signature(*entities)
+        return sig, entities
 
     def screen_capture_loop(self, limit_capture_date=None, auto=True):
         columns = ('date', 'type', 'team1', 'team2', 'player', 'amount')
